@@ -12,11 +12,15 @@ import sys
 import threading
 import time
 from urllib.parse import urlparse
-from claude_login import Term, ANSI
+from claude_login import Term, ANSI, OSC8
 
 URL = re.compile(r'https://accounts\.google\.com/o/oauth2/(?:v2/)?auth\?[^\s\x07\x1b"<>]+')
 
 def extract_url(raw):
+    for candidate in reversed(OSC8.findall(raw)):
+        u = urlparse(candidate)
+        if u.scheme == 'https' and u.hostname == 'accounts.google.com' and u.path in ['/o/oauth2/auth', '/o/oauth2/v2/auth'] and not u.username and not u.password:
+            return candidate
     text = ANSI.sub('', raw)
     hits = URL.findall(text)
     return hits[-1] if hits else None
