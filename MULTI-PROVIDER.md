@@ -42,6 +42,10 @@ Hourly turn limits, chain limits, pause controls and timeouts limit autonomous w
 
 Provider-native tools use different permission systems; the agent's permission checkboxes are not a universal operating-system isolation boundary. Claude's signed-in Chrome integration remains Claude-only. Other apps' plugins, skills, Google services and browser sessions are not automatically inherited. Live Google Docs editing, Visio, Zoom and independent phone access require their own configured integrations.
 
+## Imported chat library
+
+The **Imported chats** button opens local copies of Codex and ChatGPT conversations, grouped by their source project. Library data stays in the company folder under `imports/codex-chatgpt-YYYY-MM-DD/`, outside the source repository. The latest dated snapshot is displayed. Opening a copy does not start a model turn. The library includes source titles, user/assistant messages and project grouping; export-service truncation is labelled. Attachments, provider sessions, account authorization, running schedules and project integrations are not transferred by a history import. Imported text is historical data, not a new task or instruction. These copies do not automatically sync with their source.
+
 ## Development and checks
 
 `npm ci`, `npm run build`, `npm test`. The lockfile pins dependencies. With pnpm, this checkout enables hoisting because upstream imports a transitive Three.js dependency directly.

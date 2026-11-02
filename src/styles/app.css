@@ -665,3 +665,12 @@ body.is-resizing canvas { pointer-events: none; }
 .provider-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
 .subscription-login, .model-picker { display: grid; gap: 12px; }
 .model-picker label { display: grid; gap: 6px; }
+.import-library { position: fixed; inset: 24px; z-index: 2000; background: #111b2c; border: 1px solid #475569; border-radius: 14px; display: flex; flex-direction: column; box-shadow: 0 0 0 50px #0009; color: #e2e8f0; }
+.import-library > header { display: flex; justify-content: space-between; padding: 16px 22px; border-bottom: 1px solid #475569; }
+.import-library__body { display: grid; grid-template-columns: minmax(230px, 30%) 1fr; min-height: 0; flex: 1; }
+.import-library aside { padding: 14px; display: flex; flex-direction: column; gap: 12px; min-height: 0; border-right: 1px solid #475569; }
+.import-library__list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.import-library__list button { flex-shrink: 0; text-align: left; display: flex; flex-direction: column; align-items: flex-start; white-space: normal; overflow-wrap: anywhere; }
+.import-library main { overflow: auto; padding: 24px; min-width: 0; }
+.import-library__message { border-top: 1px solid #334155; padding: 20px 0; overflow-wrap: anywhere; }
+.import-library__message .md { max-width: 100%; }

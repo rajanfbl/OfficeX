@@ -15,6 +15,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { scaffoldProject } from './scaffold-project.mjs';
 import { createEngine } from './engine/index.mjs';
+import { importLibrary } from './import-library.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
@@ -121,6 +122,10 @@ const server = http.createServer(async (req, res) => {
   // ---- API ----
   if (route === '/api/health') return sendJson(res, 200, { ok: true, version: VERSION, uptimeSec: Math.round((Date.now() - started) / 1000) });
   if (route === '/api/info') return sendJson(res, 200, { instanceName: cfg.instanceName, version: VERSION, basePath: BASE, urls: lanAddresses().map(urlFor), passwordProtected: !!cfg.password, companyRoot: cfg.companyRoot });
+  if (route === '/api/import-library' && req.method === 'GET') {
+    try { return sendJson(res, 200, importLibrary(cfg.companyRoot, url.searchParams.get('id'))); }
+    catch (error) { return sendJson(res, 400, { error: error.message }); }
+  }
   if (route === '/api/shutdown') {
     if (req.method !== 'POST' || !isLoopback(req.socket.remoteAddress)) return sendJson(res, 403, { error: 'Only this computer can stop the app.' });
     sendJson(res, 202, { stopping: true });
