@@ -4,10 +4,12 @@ import type { Lang } from '../types';
 import { UsageMeter } from './UsageMeter';
 import { useState } from 'react';
 import { ImportLibrary } from './ImportLibrary';
+import { WhatsAppPanel } from './WhatsAppPanel';
 
 export function TopBar() {
   const t = useT();
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
   const company = useStore((s) => s.company);
   const claude = useStore((s) => s.claude);
   const providers = useStore((s) => s.providers);
@@ -45,6 +47,8 @@ export function TopBar() {
       <small className="muted">v0.5.1 beta</small>
 
       <div className="topbar__right">
+        <button className="btn btn--ghost" onClick={() => setWhatsappOpen(true)}>WhatsApp</button>
+        {whatsappOpen && <WhatsAppPanel close={() => setWhatsappOpen(false)} />}
         <button className="btn btn--ghost" onClick={() => setLibraryOpen(true)}>Imported chats</button>
         {libraryOpen && <ImportLibrary close={() => setLibraryOpen(false)} />}
         <button className={`btn ${allPaused ? 'btn--warn' : 'btn--ghost'}`} onClick={() => setAllPaused(!allPaused)} aria-pressed={allPaused}>

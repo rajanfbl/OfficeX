@@ -50,6 +50,12 @@ Provider-native tools use different permission systems; the agent's permission c
 
 The **Imported chats** button opens local copies of Codex and ChatGPT conversations, grouped by their source project. Library data stays in the company folder under `imports/codex-chatgpt-YYYY-MM-DD/`, outside the source repository. The latest dated snapshot is displayed. Opening a copy does not start a model turn. The library includes source titles, user/assistant messages and project grouping; export-service truncation is labelled. Attachments, provider sessions, account authorization, running schedules and project integrations are not transferred by a history import. Imported text is historical data, not a new task or instruction. These copies do not automatically sync with their source.
 
+## Regular WhatsApp workspace
+
+The **WhatsApp** panel provides a manual companion to [WhatsApp Web](https://web.whatsapp.com/). Sign in with WhatsApp's own QR flow in the system browser. OfficeX does not read or automate that browser session. Supported local tools include importing .txt chat exports (2 MB maximum), Android/iPhone transcript parsing, searching and viewing messages, project-scoped saved drafts, and preparing official [click-to-chat links](https://faq.whatsapp.com/5913398998672934). A link prefills the message; the owner reviews it and presses Send in WhatsApp.
+
+AI summary, reply drafting, task extraction and translation use the selected project's existing OfficeX coordinator. Only the reviewed context box is sent, capped at 12,000 characters; imports initially populate it from the latest 50 messages. Saving, searching or opening WhatsApp does not invoke a model. AI actions consume the selected coordinator's plan allowance. Copies and drafts stay under the company folder's `imports/whatsapp/`, outside this repository. Live inbox sync, automatic replies, bulk sending, media import and voice transcription are not implemented. No unofficial WhatsApp client is installed.
+
 ## Development and checks
 
 `npm ci`, `npm run build`, `npm test`. The lockfile pins dependencies. With pnpm, this checkout enables hoisting because upstream imports a transitive Three.js dependency directly.

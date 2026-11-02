@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { scaffoldProject } from './scaffold-project.mjs';
 import { createEngine } from './engine/index.mjs';
 import { importLibrary } from './import-library.mjs';
+import { whatsappLibrary } from './whatsapp-library.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
@@ -121,6 +122,22 @@ const server = http.createServer(async (req, res) => {
 
   // ---- API ----
   if (route === '/api/health') return sendJson(res, 200, { ok: true, version: VERSION, uptimeSec: Math.round((Date.now() - started) / 1000) });
+  if (route === '/api/whatsapp') {
+    if (req.method === 'GET') {
+      try { const lib = whatsappLibrary(cfg.companyRoot); return sendJson(res, 200, url.searchParams.has('id') ? lib.get(url.searchParams.get('id')) : lib.list()); }
+      catch (error) { return sendJson(res, 400, { error: error.message }); }
+    }
+    if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed' });
+    if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return sendJson(res, 403, { error: 'Open this feature from OfficeX.' });
+    readBody(req, 8_000_000, buffer => {
+      try {
+        const body = JSON.parse(buffer.toString('utf8')), lib = whatsappLibrary(cfg.companyRoot);
+        if (!['import', 'draft'].includes(body.action)) throw Error('Unknown WhatsApp action');
+        return sendJson(res, 201, body.action === 'import' ? lib.import(body) : lib.draft(body));
+      } catch (error) { return sendJson(res, 400, { error: error.message }); }
+    });
+    return;
+  }
   if (route === '/api/info') return sendJson(res, 200, { instanceName: cfg.instanceName, version: VERSION, basePath: BASE, urls: lanAddresses().map(urlFor), passwordProtected: !!cfg.password, companyRoot: cfg.companyRoot });
   if (route === '/api/import-library' && req.method === 'GET') {
     try { return sendJson(res, 200, importLibrary(cfg.companyRoot, url.searchParams.get('id'))); }
