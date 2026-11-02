@@ -5,9 +5,11 @@ import path from 'node:path';
 import { spawn, spawnSync, execFileSync, execFile } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import statusTools from './codex-status.cjs';
+import catalogTools from './model-catalog.cjs';
 
 export const EXTRA_MODELS = ['gpt-6.1-sol', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low', 'gemini-3.8-flash-high'];
-export const providerFor = (model) => model?.startsWith('gemini-') ? 'gemini' : model?.startsWith('gpt-') ? 'codex' : 'claude';
+const discoveredProviders = new Map();
+export const providerFor = (model) => discoveredProviders.get(model) || (model?.startsWith('gemini-') ? 'gemini' : model?.startsWith('gpt-') ? 'codex' : 'claude');
 export const DEFAULT_MODEL = 'gpt-6.1-sol';
 export function localEnv(extra = {}) {
   const env = { ...process.env, ...extra };
@@ -55,6 +57,10 @@ export function createProviders({ cfg, companyRoot, appRoot }) {
           p.identity = undefined;
           try {
               const q = await statusTools.codexStatus(bins.codex);
+              const catalog = catalogTools.modelCatalog(q.models);
+              if (catalog.length) { p.modelCatalog = catalog; p.models = catalog.map(m => m.id); p.modelCatalogNote = ''; }
+              else p.modelCatalogNote = 'Could not refresh models. Showing the last known list.';
+              for (const model of p.models) discoveredProviders.set(model, p.id);
               p.identity = q.account || undefined;
               p.identityNote = q.accountError || (q.account?.email ? '' : 'Codex did not provide an account email.');
               if (withQuota) {
@@ -69,6 +75,8 @@ export function createProviders({ cfg, companyRoot, appRoot }) {
           const available = models.split(/\r?\n/).map((s) => s.split(/\s/)[0]).filter((s) => s.startsWith('gemini-'));
           if (!available.length) throw new Error('Sign in to Antigravity with your Google account first.');
           p.models = available;
+          p.modelCatalog = available.map(id => ({ id, label: id }));
+          for (const model of p.models) discoveredProviders.set(model, p.id);
           p.detail = 'Existing Google login; extra AI-credit spending disabled';
           p.identityNote = 'This Antigravity connection check does not return the signed-in Google email. Check the account in Antigravity.';
         }

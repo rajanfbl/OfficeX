@@ -32,6 +32,8 @@ Authorization URLs are checked against provider origins. Codes remain local and 
 
 Each new agent has an **AI provider** selector and a **Model** selector. Managers, workers, secretaries and fresh read-only advisors can use different providers. Codex is the default. A read-only advisor importing an existing Claude transcript remains tied to Claude; create a fresh advisor for Codex or Gemini.
 
+Codex models are discovered from the official app-server model catalog, including older regular models available to the connected account. Internal hidden models are excluded. Gemini models come from Antigravity's model list. **Refresh available models** updates these lists without a model turn; source access and plan limits still apply. Existing saved selections remain visible if a model disappears from the latest list.
+
 Open a project and select **Use this project for team chats**. Its **Agent mode** toggle is initially off: the coordinator answers directly. Enable it to let the coordinator delegate through OfficeX tools to agents using their chosen providers. Each team has one active project at a time; finish queued work before switching it.
 
 Provider conversations have separate IDs. OfficeX supplies shared room context and saved memory when a provider session begins, then reuses that provider's native conversation. It does not merge complete native histories or automatically import chats from another app. Start fresh conversation keeps the OfficeX chat and saved memory.

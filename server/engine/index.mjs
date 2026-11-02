@@ -35,7 +35,8 @@ export function createEngine({ cfg, appRoot, port, log }) {
   const C = cfg.companyRoot ? path.resolve(cfg.companyRoot) : '';
   const providers = createProviders({ cfg, companyRoot: C, appRoot });
   const providerLogin = new ProviderLogin({ providers, cfg, appRoot, changed: () => providersChanged() });
-  const selectedModel = (a) => a.pending?.filter((i) => !i.held).reduce((m, i) => MODELS.includes(i.run?.model) ? i.run.model : m, a.model) || DEFAULT_MODEL;
+  const modelsFor = () => [...new Set([...MODELS, ...Object.values(providers.state).flatMap(p => p.models || [])])];
+  const selectedModel = (a) => a.pending?.filter((i) => !i.held).reduce((m, i) => modelsFor().includes(i.run?.model) ? i.run.model : m, a.model) || DEFAULT_MODEL;
   const ready = (model) => providerFor(model) === 'claude' ? S.claude.state === 'connected' : providers.ready(model);
   const providerViews = () => ({ ...providers.state, claude: { id: 'claude', label: 'Claude Code', ...S.claude, enabled: S.claude.account?.mode !== 'none', models: MODELS.filter((m) => providerFor(m) === 'claude') } });
   function providersChanged() { emit({ type: 'providers', providers: providerViews() }); snapshot(); pumpSoon(); }
@@ -517,7 +518,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
     const help = claudeBin?.help ?? '';
     // the manager may have picked a model/effort for this task only (send_message model/effort)
     const run = items.reduce((acc, i) => ({ ...acc, ...(i.run ?? {}) }), {});
-    const model = MODELS.includes(run.model) ? run.model : a.model || DEFAULT_MODEL;
+    const model = modelsFor().includes(run.model) ? run.model : a.model || DEFAULT_MODEL;
     const provider = providerFor(model);
     const effort = EFFORTS.includes(run.effort) ? run.effort : a.effort;
     turn.model = model;
@@ -869,7 +870,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
           to: S_STR('Who gets it'),
           text: S_STR('Markdown text'),
           needs_input: { type: 'boolean', description: 'to="owner" only: the owner must decide or answer; also sent to their phone via the secretary' },
-          model: { type: 'string', enum: [...MODELS, 'fable', 'opus', 'sonnet', 'haiku'], description: 'Manager only: model for this delegated task. Omit to keep the recipient model. gpt-6.1-sol uses Codex; gemini-* uses Google; claude-* uses Claude. Do not change providers to bypass plan limits.' },
+          model: { type: 'string', enum: [...modelsFor(), 'fable', 'opus', 'sonnet', 'haiku'], description: 'Manager only: model for this delegated task. Omit to keep the recipient model. gpt-6.1-sol uses Codex; gemini-* uses Google; claude-* uses Claude. Do not change providers to bypass plan limits.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Managers only, for a team member: how deeply they think for THIS task only.' },
         },
         required: ['to', 'text'],
@@ -1052,7 +1053,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
         const run = {};
         if (a.role === 'manager' && a.autoModel !== false && target.role !== 'advisor') {
           if (MODEL_ALIAS[args.model]) run.model = MODEL_ALIAS[args.model];
-          else if (MODELS.includes(args.model)) run.model = args.model;
+          else if (modelsFor().includes(args.model)) run.model = args.model;
           if (EFFORTS.includes(args.effort)) run.effort = args.effort;
         }
         const msg = post(roomId, key(a), roomId.endsWith('__general') ? `@${target.name} ${text}` : text, { hop, kind, steps: turn.steps.length ? [...turn.steps] : undefined, ...(run.model || run.effort ? { run } : {}) });
@@ -1583,7 +1584,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
       name: clip(a.name, 40) || a.id,
       role,
       roleTitle: clip(a.roleTitle, 60) || role,
-      model: MODELS.includes(a.model) ? a.model : DEFAULT_MODEL,
+      model: modelsFor().includes(a.model) ? a.model : DEFAULT_MODEL,
       effort: EFFORTS.includes(a.effort) ? a.effort : 'medium',
       outputStyle: ['default', 'explanatory', 'concise'].includes(a.outputStyle) ? a.outputStyle : 'default',
       color: /^#[0-9a-f]{6}$/i.test(a.color ?? '') ? a.color : '#F2B544',
@@ -1625,7 +1626,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
     const a = S.agents.get(`${body.teamId}/${body.id}`);
     if (!a) throw new Error('unknown agent');
     const p = body.patch ?? {};
-    if (p.model !== undefined && !MODELS.includes(p.model)) throw new Error('Unknown model');
+    if (p.model !== undefined && !modelsFor().includes(p.model)) throw new Error('Unknown model');
     if (p.model !== undefined && running.has(key(a))) throw new Error('Wait for this agent to finish before switching models');
     if (a.advisorSession && p.model && providerFor(p.model) !== 'claude') throw new Error('Imported Claude advisor sessions require a Claude model. Create a new advisor without importing a session to use another provider.');
     if (p.model && p.model !== a.model) { a.retryAfter = 0; for (const item of a.pending ?? []) item.held = false; savePending(a); }

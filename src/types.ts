@@ -4,7 +4,7 @@
 
 export type Lang = 'en' | 'id';
 
-export type ModelId = 'gpt-6.1-sol' | 'gemini-3.8-flash-medium' | 'gemini-3.8-flash-low' | 'gemini-3.8-flash-high' | 'claude-fable-5-1' | 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5';
+export type ModelId = string;
 
 export const MODELS: { id: ModelId; label: string }[] = [
   { id: 'gpt-6.1-sol', label: 'Codex · GPT 6.1 Sol' },
@@ -296,6 +296,8 @@ export interface LiveSnapshot {
 }
 
 export interface ProviderConnection {
+  modelCatalog?: { id: string; label: string; hidden?: boolean }[];
+  modelCatalogNote?: string;
   identity?: { email?: string; plan?: string; source: string };
   identityNote?: string;
   quota?: { primary?: { usedPercent: number; resetsAt: number }; secondary?: { usedPercent: number; resetsAt: number }; credits?: { balance?: string | null }; checkedAt: number };
