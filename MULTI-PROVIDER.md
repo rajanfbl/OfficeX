@@ -10,6 +10,12 @@ This fork extends [patricknks/OfficeX](https://github.com/patricknks/OfficeX), p
 4. Configure a company folder outside this checkout in server.json. Keep it private. Set `host` to `127.0.0.1` for laptop-only access. Optional `codexPath`, `geminiPath`, and `claudePath` point to the corresponding official executables; otherwise OfficeX looks for them on PATH.
 5. Start the app. Use **Connect ChatGPT**, **Connect Gemini**, or **Connect Claude** in the top bar. Each opens the relevant connection panel. The Overview panel shows status and usage.
 
+## Windows desktop window
+
+The `desktop/` client opens the same OfficeX workspace in its own native window, without a browser tab. It starts the local engine if necessary and reuses the configured company folder. Sign-in links open in the system browser. Closing the desktop leaves the engine running so schedules and browser access continue; the native OfficeX menu also offers **Stop engine and quit**.
+
+To package it locally, build the web interface, then run `scripts/package-desktop.ps1` with `-ElectronRuntime` pointing to an official extracted Electron runtime, `-NodeExe` pointing to a trusted Node.js executable, and `-Destination` pointing to a separate app installation folder. The script copies framework files only, verifies executable copies, and writes a private instance.json that points to the existing OfficeX checkout. Launch the resulting **OfficeX.exe**. Framework and instance files are not committed to this repository. No paid service is required for the desktop window.
+
 ## Subscription authorization
 
 - **ChatGPT:** Codex's official app-server performs browser OAuth and owns the local callback, credential storage and token refresh. A device-code alternative is available when the account supports it. API-key accounts are rejected for worker launches. An existing ChatGPT OAuth login can be reused without signing out other Codex clients.

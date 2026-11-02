@@ -15,3 +15,4 @@ tools/
 scripts/claude-install.download.ps1
 LOCAL-EDITION.md
 scripts/Launch-Local.ps1
+desktop/instance.json
