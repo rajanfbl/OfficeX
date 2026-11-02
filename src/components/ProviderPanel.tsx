@@ -25,6 +25,8 @@ export function ProviderPanel() {
     {Object.values(data?.providers ?? {}).map((p) => <article key={p.id} className="provider-card">
       <div className="provider-card__head"><strong>{p.label}</strong><span className={p.state === 'connected' ? 'provider-ready' : 'muted'}>{p.state === 'connected' ? 'Ready' : 'Not connected'}</span></div>
       <p className="small">{p.detail || (p.state === 'connected' ? 'Connected' : 'Optional: connect your Claude account below.')}</p>
+      {p.state === 'connected' && <p className="small">Account: {p.identity?.email || 'Email unavailable'}{p.identity?.plan ? ` · Plan: ${p.identity.plan}` : ''}</p>}
+      {p.state === 'connected' && p.identityNote && <p className="muted small">{p.identityNote}</p>}
       {p.quota && <p className="small">{p.quota.primary && <>Session: {p.quota.primary.usedPercent}% used · resets {new Date(p.quota.primary.resetsAt * 1000).toLocaleString()}<br /></>}{p.quota.secondary && <>Week: {p.quota.secondary.usedPercent}% used · resets {new Date(p.quota.secondary.resetsAt * 1000).toLocaleString()}<br /></>}Codex credits: {p.quota.credits?.balance ?? 'not reported'}</p>}
       {p.quotaError && <p className="muted small">Plan balance unavailable: {p.quotaError}</p>}
       {p.id === 'gemini' && <p className="muted small">Remaining Google plan quota is not reported by this connection. Check Antigravity for its live limits.</p>}

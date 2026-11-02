@@ -24,6 +24,8 @@ To package it locally, build the web interface, then run `scripts/package-deskto
 
 No shared provider passwords, copied OAuth client secrets, paid API fallback or automatic provider failover are configured. Google's additional AI-credit spending is disabled for OfficeX worker runs. Account access, vendor terms and normal plan limits still apply. A subscription does not guarantee access to every listed model.
 
+Connection panels show the signed-in email and plan when Codex supplies them through `account/read`. Only whitelisted display fields are exposed; raw account responses and tokens are excluded. The current Antigravity connection check does not supply a Google email, so its panel labels that detail unavailable. **Check connection** refreshes account metadata without an AI turn.
+
 Authorization URLs are checked against provider origins. Codes remain local and are not written into chat history. Cancel/expiration ends the login session; cancellation does not log out other applications. Complete sign-in yourself on the official page. Never paste passwords or authorization codes into AI chat.
 
 ## Agents and project mode

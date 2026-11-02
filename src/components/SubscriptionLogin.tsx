@@ -49,6 +49,12 @@ export function SubscriptionLogin({ provider }: { provider: 'codex' | 'gemini' }
     <h3>{provider === 'codex' ? 'ChatGPT subscription through Codex' : 'Gemini subscription through Antigravity'}</h3>
     <p>Sign in with your {label} account. The official tool handles authorization and stores the login securely. OfficeX does not need your password or an API key.</p>
     <p role="status">{connected ? `✓ ${label} is connected. You can use it now—no sign-in is needed.` : state?.phase === 'connected' ? 'Check your connection or sign in below.' : state?.message || 'Ready to start sign-in.'}</p>
+    {connected && <div className="provider-card" aria-label="Signed-in account">
+      <strong>Signed-in account</strong>
+      <p>{connection?.identity?.email || 'Email unavailable from this provider'}</p>
+      {connection?.identity?.plan && <p>Plan: {connection.identity.plan}</p>}
+      {connection?.identityNote && <p className="muted small">{connection.identityNote}</p>}
+    </div>}
     {connected && <div className="acct__row acct__row--wrap">
       <button className="btn btn--primary" disabled={busy} onClick={() => void checkConnection()}>{busy ? 'Checking…' : 'Check connection'}</button>
       {provider === 'codex' && <button className="btn btn--ghost" disabled={busy} onClick={() => void act('start', { force: true })}>Sign in again / change account</button>}

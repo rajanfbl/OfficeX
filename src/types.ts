@@ -296,6 +296,8 @@ export interface LiveSnapshot {
 }
 
 export interface ProviderConnection {
+  identity?: { email?: string; plan?: string; source: string };
+  identityNote?: string;
   quota?: { primary?: { usedPercent: number; resetsAt: number }; secondary?: { usedPercent: number; resetsAt: number }; credits?: { balance?: string | null }; checkedAt: number };
   quotaError?: string;
   id: string;

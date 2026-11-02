@@ -45,21 +45,24 @@ export function createProviders({ cfg, companyRoot, appRoot }) {
     if (refreshing) return refreshing;
     refreshing = Promise.all(Object.values(state).map(async (p) => {
       p.checkedAt = Date.now();
-      if (!p.enabled) { p.state = 'disconnected'; p.detail = 'Disabled in OfficeX'; return; }
-      if (!bins[p.id]) { p.state = 'disconnected'; p.detail = 'Local CLI not found'; return; }
+      if (!p.enabled) { p.state = 'disconnected'; p.identity = undefined; p.detail = 'Disabled in OfficeX'; return; }
+      if (!bins[p.id]) { p.state = 'disconnected'; p.identity = undefined; p.detail = 'Local CLI not found'; return; }
       try {
         if (p.id === 'codex') {
           const status = await run(bins.codex, ['login', 'status']);
           if (!/ChatGPT/i.test(status)) throw new Error('Sign in to Codex with ChatGPT. API-key accounts are not enabled here.');
           p.detail = 'Existing ChatGPT login; plan limits apply';
-          if (withQuota) {
-            try {
+          p.identity = undefined;
+          try {
               const q = await statusTools.codexStatus(bins.codex);
+              p.identity = q.account || undefined;
+              p.identityNote = q.accountError || (q.account?.email ? '' : 'Codex did not provide an account email.');
+              if (withQuota) {
               const limits = q.limits?.rateLimits;
               p.quota = limits ? { primary: limits.primary, secondary: limits.secondary, credits: limits.credits, checkedAt: Date.now() } : undefined;
               p.quotaError = q.limitsError;
-            } catch (e) { p.quotaError = e.message; }
-          }
+              }
+          } catch (e) { p.identityNote = 'Account details could not be checked. Try Check connection again.'; if (withQuota) p.quotaError = e.message; }
         } else {
           assertGoogleSubscription();
           const models = await run(bins.gemini, ['models']);
@@ -67,9 +70,10 @@ export function createProviders({ cfg, companyRoot, appRoot }) {
           if (!available.length) throw new Error('Sign in to Antigravity with your Google account first.');
           p.models = available;
           p.detail = 'Existing Google login; extra AI-credit spending disabled';
+          p.identityNote = 'This Antigravity connection check does not return the signed-in Google email. Check the account in Antigravity.';
         }
         p.state = 'connected';
-      } catch (err) { p.state = 'disconnected'; p.detail = err.message; }
+      } catch (err) { p.state = 'disconnected'; p.identity = undefined; p.detail = err.message; }
     })).finally(() => { refreshing = null; });
     return refreshing;
   }
@@ -98,7 +102,7 @@ export function createProviders({ cfg, companyRoot, appRoot }) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, JSON.stringify(Object.fromEntries(Object.values(state).map((p) => [p.id, p.enabled])), null, 2));
     },
-    invalidate(model, detail) { const p = state[providerFor(model)]; if (p) { p.state = 'disconnected'; p.detail = detail; } },
+    invalidate(model, detail) { const p = state[providerFor(model)]; if (p) { p.state = 'disconnected'; p.identity = undefined; p.detail = detail; } },
   };
 }
 
