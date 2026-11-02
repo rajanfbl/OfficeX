@@ -164,7 +164,8 @@ export function ChatPanel() {
     </button>
   );
 
-  const queued = claude.state !== 'connected' ? t('chat.queuedOffline') : team?.paused ? t('chat.queuedPaused') : null;
+  const recipient = Object.values(agents).find((a) => a.teamId === teamId && (isOffice ? a.role === 'secretary' : a.role === 'manager'));
+  const queued = (recipient?.providerState ?? claude.state) !== 'connected' ? 'The selected agent’s AI is disconnected. Your message will wait.' : team?.paused ? t('chat.queuedPaused') : null;
   const addFiles = (files: FileList | File[]) => setPending((p) => [...p, ...Array.from(files)].slice(0, 10));
 
   async function send() {

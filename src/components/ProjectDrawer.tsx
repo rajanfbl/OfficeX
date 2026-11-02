@@ -4,6 +4,7 @@ import { useT, type TKey } from '../i18n';
 import { OFFICE_ID, PHASES, type Collaborator } from '../types';
 import { planFolders } from '../projects/plan';
 import { ConfirmDialog, archive } from './ConfirmDialog';
+import { api } from '../api';
 
 const COMMANDS = ['/start', '/research', '/auto-research', '/index-reference', '/decision', '/build-brief', '/journal', '/commit-discussion', '/setup-journal'];
 
@@ -54,6 +55,23 @@ export function ProjectDrawer() {
         </button>
       </header>
       <div className="drawer__body">
+        <section>
+          <h3>How this project works</h3>
+          <label className="check"><input type="checkbox" checked={project.agentMode === true} onChange={async (e) => {
+            const agentMode = e.target.checked;
+            useStore.setState({ projects: useStore.getState().projects.map((p) => p.id === project.id ? { ...p, agentMode } : p) });
+            try { await api('PATCH', 'api/projects', { id: project.id, agentMode }); }
+            catch (err) {
+              useStore.setState({ projects: useStore.getState().projects.map((p) => p.id === project.id ? { ...p, agentMode: project.agentMode } : p) });
+              window.dispatchEvent(new CustomEvent('ox:error', { detail: (err as Error).message }));
+            }
+          }} />Agent mode: allow the manager to delegate</label>
+          <p className="muted small">Off by default. Choose Codex or Gemini in each agent’s model menu. Chats use the project selected for this team.</p>
+          <button className="btn btn--ghost btn--sm" disabled={team?.activeProjectId === project.id} onClick={async () => {
+            try { await api('PATCH', 'api/teams', { id: project.teamId, activeProjectId: project.id }); }
+            catch (err) { window.dispatchEvent(new CustomEvent('ox:error', { detail: (err as Error).message })); }
+          }}>{team?.activeProjectId === project.id ? 'Selected for this team’s chats' : 'Use this project for team chats'}</button>
+        </section>
         <section>
           <h3>{t('pd.phase')}</h3>
           <ol className="phases">

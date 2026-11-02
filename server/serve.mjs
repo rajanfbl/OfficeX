@@ -18,8 +18,8 @@ import { createEngine } from './engine/index.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
-const LOGS = path.join(ROOT, 'logs');
-const CONFIG = path.join(ROOT, 'server.json');
+const LOGS = process.env.OFFICEX_LOG_DIR || path.join(ROOT, 'logs');
+const CONFIG = process.env.OFFICEX_CONFIG || path.join(ROOT, 'server.json');
 const EXAMPLE = path.join(ROOT, 'server.example.json');
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
@@ -338,8 +338,11 @@ server.listen(Number(cfg.port), cfg.host, () => {
   log(`${cfg.instanceName} ${VERSION} is running.`);
   log(`  Company folder: ${cfg.companyRoot || '(not set: projects are created in the app only)'}`);
   log(`  This computer: ${urlFor('localhost')}`);
-  lanAddresses().forEach((ip) => log(`  Network:       ${urlFor(ip)}`));
-  log(cfg.password ? '  Other devices need the password from server.json.' : '  No password set: anyone on your LAN or tailnet can open it.');
+  if (['127.0.0.1', '::1', 'localhost'].includes(cfg.host)) log('  Access: this computer only.');
+  else {
+    lanAddresses().forEach((ip) => log(`  Network:       ${urlFor(ip)}`));
+    log(cfg.password ? '  Other devices need the password from server.json.' : '  No password set: anyone on your LAN or tailnet can open it.');
+  }
 });
 
 process.on('SIGINT', () => shutdown('Ctrl+C'));

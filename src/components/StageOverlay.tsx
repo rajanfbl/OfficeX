@@ -7,6 +7,8 @@ export function StageOverlay() {
   const t = useT();
   const teams = useStore((s) => s.teams);
   const claude = useStore((s) => s.claude);
+  const providers = useStore((s) => s.providers);
+  const connected = claude.state === 'connected' || Object.values(providers ?? {}).some((p) => p.state === 'connected');
   const selectedTeamId = useStore((s) => s.selectedTeamId);
   const floorView = useStore((s) => s.floorView);
   const labels = useStore((s) => s.labels);
@@ -16,11 +18,11 @@ export function StageOverlay() {
   return (
     <>
       <div className="stage-top">
-        {claude.state !== 'connected' ? (
+        {!connected ? (
           <div className="offline-banner" role="status">
-            <span>{t('claude.offlineBanner')}</span>
+            <span>Connect Codex, Gemini, or Claude to start working.</span>
             <button className="btn btn--primary btn--sm" onClick={() => st.setConnectOpen(true)} disabled={claude.state === 'connecting'}>
-              {claude.state === 'connecting' ? t('claude.connecting') : t('claude.connect')}
+              AI connections
             </button>
           </div>
         ) : (

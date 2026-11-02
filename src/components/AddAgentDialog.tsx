@@ -2,19 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { agentKey, useStore } from '../store';
 import { useT, type TKey } from '../i18n';
 import { AGENT_COLORS, newSessionId } from '../mock/data';
-import { MODELS, READ_ONLY_PERMISSIONS, type BrowserMode, type EffortLevel, type ModelId, type OutputStyle, type Permission, type RoleKind } from '../types';
+import { READ_ONLY_PERMISSIONS, type BrowserMode, type EffortLevel, type ModelId, type OutputStyle, type Permission, type RoleKind } from '../types';
+import { ModelPicker } from './ModelPicker';
 import { EffortStyle } from './EffortStyle';
 import { Permissions } from './Permissions';
 import { slugify } from '../util';
 
 const TEMPLATES: Record<RoleKind, { model: ModelId; effort: EffortLevel; perms: Permission[] }> = {
-  manager: { effort: 'high', model: 'claude-opus-5-5', perms: ['web', 'read_company', 'write_workspace', 'write_projects'] },
-  researcher: { effort: 'medium', model: 'claude-sonnet-5-5', perms: ['web', 'browser', 'read_company', 'write_workspace'] },
-  analyst: { effort: 'medium', model: 'claude-sonnet-5-5', perms: ['read_company', 'write_workspace', 'run_commands'] },
-  reviewer: { effort: 'high', model: 'claude-opus-5-5', perms: ['read_company', 'write_workspace'] },
-  custom: { effort: 'medium', model: 'claude-sonnet-5-5', perms: ['read_company', 'write_workspace'] },
-  advisor: { effort: 'high', model: 'claude-opus-5-5', perms: ['web', 'read_company'] },
-  secretary: { effort: 'low', model: 'claude-haiku-5-5', perms: ['read_company', 'run_commands'] },
+  manager: { effort: 'high', model: 'gpt-6.1-sol', perms: ['web', 'read_company', 'write_workspace', 'write_projects'] },
+  researcher: { effort: 'medium', model: 'gpt-6.1-sol', perms: ['web', 'browser', 'read_company', 'write_workspace'] },
+  analyst: { effort: 'medium', model: 'gpt-6.1-sol', perms: ['read_company', 'write_workspace', 'run_commands'] },
+  reviewer: { effort: 'high', model: 'gpt-6.1-sol', perms: ['read_company', 'write_workspace'] },
+  custom: { effort: 'medium', model: 'gpt-6.1-sol', perms: ['read_company', 'write_workspace'] },
+  advisor: { effort: 'high', model: 'gpt-6.1-sol', perms: ['web', 'read_company'] },
+  secretary: { effort: 'low', model: 'gpt-6.1-sol', perms: ['read_company', 'run_commands'] },
 };
 // the secretary has its own dialog in the front office
 const ROLES = (Object.keys(TEMPLATES) as RoleKind[]).filter((r) => r !== 'secretary');
@@ -35,7 +36,7 @@ export function AddAgentDialog() {
   const [role, setRole] = useState<RoleKind>('researcher');
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
-  const [model, setModel] = useState<ModelId>('claude-sonnet-5-5');
+  const [model, setModel] = useState<ModelId>('gpt-6.1-sol');
   const [effort, setEffort] = useState<EffortLevel>('medium');
   const [outputStyle, setOutputStyle] = useState<OutputStyle>('default');
   const [perms, setPerms] = useState<Permission[]>([]);
@@ -76,7 +77,7 @@ export function AddAgentDialog() {
   }, [role, title, team]);
 
   const isAdvisor = role === 'advisor';
-  const sessionOk = !isAdvisor || UUID.test(session.trim());
+  const sessionOk = !isAdvisor || !model.startsWith('claude-') || !session.trim() || UUID.test(session.trim());
   const canHire = !!name.trim() && !!title.trim() && !(role === 'manager' && hasManager) && sessionOk;
 
   return (
@@ -96,8 +97,8 @@ export function AddAgentDialog() {
             effort,
             outputStyle,
             color: AGENT_COLORS[Object.keys(agentsRec).length % AGENT_COLORS.length],
-            sessionId: isAdvisor ? session.trim() : newSessionId(),
-            ...(isAdvisor ? { advisorSession: { sessionId: session.trim(), fork } } : {}),
+            sessionId: newSessionId(),
+            ...(isAdvisor && model.startsWith('claude-') && session.trim() ? { advisorSession: { sessionId: session.trim(), fork } } : {}),
             status: 'idle',
             activity: '',
             reportsTo: role === 'manager' ? undefined : mgr?.id,
@@ -145,18 +146,11 @@ export function AddAgentDialog() {
               </label>
             </div>
 
-            <fieldset className="models">
-              <legend>{t('add.model')}</legend>
-              {MODELS.map((m) => (
-                <label key={m.id} className={`model-opt${model === m.id ? ' is-on' : ''}`}>
-                  <input type="radio" name="model" value={m.id} checked={model === m.id} onChange={() => setModel(m.id)} />
-                  <span className="model-opt__name">{m.label}</span>
-                  <span className="model-opt__note">{t(`model.${m.id}` as TKey)}</span>
-                </label>
-              ))}
+            <fieldset className="models"><legend>{t('add.model')}</legend>
+              <ModelPicker id="new-agent-model" model={model} onChange={(next) => { setModel(next); setSession(''); }} />
             </fieldset>
 
-            {isAdvisor && (
+            {isAdvisor && model.startsWith('claude-') && (
               <div className="advisor-box">
                 <label>
                   <span>{t('add.session')}</span>

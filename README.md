@@ -2,6 +2,10 @@
 
 # OfficeX
 
+> **This fork: v0.5.1 beta — ChatGPT/Codex, Gemini and Claude Code.** Separate connection buttons start official subscription sign-in. Every new agent can choose its provider and model. Codex is the default; project agent mode is opt-in. Read [multi-provider setup and limitations](MULTI-PROVIDER.md) before using this edition. The original OfficeX office, team, chat, memory, scheduling and projector features are retained.
+
+The documentation below describes upstream OfficeX's original Claude-only edition.
+
 A 3D office for a team of Claude Code agents. The owner (you) talks to managers, managers hand work to their agents,
 agents message each other, and all of it is visible in the building, the chat rooms and on the projector. Every agent
 is a real Claude Code session on this computer, running on a Claude subscription (no API key).

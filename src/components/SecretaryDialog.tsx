@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useT } from '../i18n';
 import { newSessionId } from '../mock/data';
-import { MODELS, OFFICE_ID, type ModelId, type SecretaryNotify } from '../types';
+import { OFFICE_ID, type ModelId, type SecretaryNotify } from '../types';
+import { ModelPicker } from './ModelPicker';
 
 const DEFAULT_NOTIFY: SecretaryNotify = { input: true, report: true, digest: '07:00' };
 
@@ -21,7 +22,7 @@ export function SecretaryDialog() {
   const dlg = useRef<HTMLDialogElement>(null);
 
   const [name, setName] = useState('');
-  const [model, setModel] = useState<ModelId>('claude-haiku-5-5');
+  const [model, setModel] = useState<ModelId>('gpt-6.1-sol');
   const [token, setToken] = useState('');
   const [chatId, setChatId] = useState('');
   const [notify, setNotify] = useState<SecretaryNotify>(DEFAULT_NOTIFY);
@@ -37,7 +38,7 @@ export function SecretaryDialog() {
     }
     const cur = Object.values(useStore.getState().agents).find((a) => a.teamId === OFFICE_ID && a.role === 'secretary');
     setName(cur?.name ?? 'Sekar');
-    setModel(cur?.model ?? 'claude-haiku-5-5');
+    setModel(cur?.model ?? 'gpt-6.1-sol');
     setToken('');
     setChatId(cur?.telegram?.chatId ?? '');
     setNotify(cur?.telegram?.notify ?? DEFAULT_NOTIFY);
@@ -164,16 +165,7 @@ export function SecretaryDialog() {
               <span>{t('add.name')}</span>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
             </label>
-            <label>
-              <span>{t('add.model')}</span>
-              <select className="input" value={model} onChange={(e) => setModel(e.target.value as ModelId)}>
-                {MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ModelPicker id="secretary-model" model={model} onChange={setModel} />
           </div>
 
           <label>

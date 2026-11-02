@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useT } from '../i18n';
 import { api, bridge } from '../api';
+import { ProviderPanel } from './ProviderPanel';
+import { SubscriptionLogin } from './SubscriptionLogin';
 
 /**
  * Choose the Claude account the agents use. Nothing is used until the owner chooses:
@@ -129,6 +131,7 @@ function AccountSection() {
 export function ConnectDialog() {
   const t = useT();
   const open = useStore((s) => s.connectOpen);
+  const provider = useStore((s) => s.connectProvider);
   const claude = useStore((s) => s.claude);
   const setOpen = useStore((s) => s.setConnectOpen);
   const connect = useStore((s) => s.connectClaude);
@@ -154,7 +157,7 @@ export function ConnectDialog() {
   return (
     <dialog ref={dlg} className="dialog dialog--narrow" onClose={() => setOpen(false)} aria-labelledby="conn-h">
       <div className="dialog__head">
-        <h2 id="conn-h">{connected ? t('connect.doneTitle') : t('connect.title')}</h2>
+        <h2 id="conn-h">AI connections</h2>
         <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label={t('common.close')}>
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -162,6 +165,10 @@ export function ConnectDialog() {
         </button>
       </div>
       <div className="dialog__body">
+        <nav className="provider-tabs" aria-label="Choose AI connection">{(['all', 'codex', 'gemini', 'claude'] as const).map((id) => <button key={id} className={`btn btn--sm ${provider === id ? 'btn--primary' : 'btn--ghost'}`} onClick={() => useStore.getState().setConnectProvider(id)}>{({ all: 'Overview', codex: 'ChatGPT', gemini: 'Gemini', claude: 'Claude' })[id]}</button>)}</nav>
+        {bridge.on && provider === 'all' && <ProviderPanel />}
+        {bridge.on && (provider === 'codex' || provider === 'gemini') && <SubscriptionLogin key={provider} provider={provider} />}
+        {provider === 'claude' && <section><h3>Claude subscription</h3>
         {bridge.on ? (
           <>
             {claude.error === 'missing' && <p className="np__error">{t('connect.missing')}</p>}
@@ -184,9 +191,10 @@ export function ConnectDialog() {
             <p className="muted small">{t('connect.note')}</p>
           </>
         )}
+        </section>}
       </div>
       <div className="dialog__foot">
-        {connected ? (
+        {provider !== 'claude' ? <button className="btn btn--primary" onClick={() => setOpen(false)}>{t('common.close')}</button> : connected ? (
           <>
             <button className="btn btn--ghost" onClick={() => { disconnect(); setOpen(false); }}>
               {t('connect.disconnect')}

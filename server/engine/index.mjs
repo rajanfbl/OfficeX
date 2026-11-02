@@ -19,17 +19,26 @@ import { parseCron, cronMatches, humanCron } from './cron.mjs';
 import { companyClaudeMd, teamClaudeMd, agentClaudeMd } from './prompts.mjs';
 import { resolveClaude, runTurn, failureKind, childEnv } from './runner.mjs';
 import { scaffoldProject } from '../scaffold-project.mjs';
+import { createProviders, providerFor, DEFAULT_MODEL, EXTRA_MODELS, buildLaunch, runLocalTurn } from './providers.mjs';
+import { companyFilePath, readCompanyFile } from './company-files.mjs';
+import { ProviderLogin } from './provider-login.mjs';
 
 export const OFFICE = 'office';
-const AGENT_FIELDS = ['id', 'teamId', 'name', 'role', 'roleTitle', 'model', 'effort', 'outputStyle', 'color', 'sessionId', 'started', 'permissions', 'browserMode', 'reportsTo', 'advisorSession', 'currentTask', 'hiredAt', 'paused', 'usage', 'context', 'compactedAt', 'autoModel'];
+const AGENT_FIELDS = ['id', 'teamId', 'name', 'role', 'roleTitle', 'model', 'effort', 'outputStyle', 'color', 'sessionId', 'started', 'providerSessions', 'providerContextVersions', 'permissions', 'browserMode', 'reportsTo', 'advisorSession', 'currentTask', 'hiredAt', 'paused', 'usage', 'context', 'compactedAt', 'autoModel'];
 const PATCHABLE = ['name', 'roleTitle', 'model', 'effort', 'outputStyle', 'permissions', 'browserMode', 'currentTask', 'color', 'autoModel'];
-const MODELS = ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
+const MODELS = [...EXTRA_MODELS, 'claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
 const EFFORTS = ['low', 'medium', 'high', 'xhigh'];
 const IMAGE = /\.(png|jpe?g|gif|webp|svg)$/i;
 const SERIES_COLORS = ['#E0A21B', '#2F8FD8', '#D9584A', '#3FA66B', '#8E6BD8', '#E07B39'];
 
 export function createEngine({ cfg, appRoot, port, log }) {
   const C = cfg.companyRoot ? path.resolve(cfg.companyRoot) : '';
+  const providers = createProviders({ cfg, companyRoot: C, appRoot });
+  const providerLogin = new ProviderLogin({ providers, cfg, appRoot, changed: () => providersChanged() });
+  const selectedModel = (a) => a.pending?.filter((i) => !i.held).reduce((m, i) => MODELS.includes(i.run?.model) ? i.run.model : m, a.model) || DEFAULT_MODEL;
+  const ready = (model) => providerFor(model) === 'claude' ? S.claude.state === 'connected' : providers.ready(model);
+  const providerViews = () => ({ ...providers.state, claude: { id: 'claude', label: 'Claude Code', ...S.claude, enabled: S.claude.account?.mode !== 'none', models: MODELS.filter((m) => providerFor(m) === 'claude') } });
+  function providersChanged() { emit({ type: 'providers', providers: providerViews() }); snapshot(); pumpSoon(); }
   const enabled = !!C;
   const lang = cfg.language === 'en' ? 'en' : 'id';
   const L = (en, id) => (lang === 'id' ? id : en);
@@ -79,6 +88,11 @@ export function createEngine({ cfg, appRoot, port, log }) {
   };
   const key = (a) => `${a.teamId}/${a.id}`;
   const teamOf = (id) => S.teams.find((t) => t.id === id);
+  const delegationEnabled = (id) => {
+    const team = teamOf(id);
+    const project = S.projects.find((p) => p.id === team?.activeProjectId && p.teamId === id);
+    return project ? project.agentMode === true : team?.agentMode === true;
+  };
   const agentsOf = (teamId) => [...S.agents.values()].filter((a) => a.teamId === teamId);
   const managerOf = (teamId) => agentsOf(teamId).find((a) => a.role === 'manager');
   const secretary = () => agentsOf(OFFICE).find((a) => a.role === 'secretary');
@@ -122,10 +136,12 @@ export function createEngine({ cfg, appRoot, port, log }) {
       role: a.role,
       roleTitle: a.roleTitle,
       model: a.model,
+      providerState: ready(selectedModel(a)) ? 'connected' : 'disconnected',
       effort: a.effort ?? 'medium',
       outputStyle: a.outputStyle ?? 'default',
       color: a.color,
       sessionId: a.sessionId,
+      resumeSessionId: providerFor(a.model) === 'claude' ? a.sessionId : a.providerSessions?.[providerFor(a.model)],
       status: a.paused ? 'paused' : a.status ?? 'idle',
       activity: a.paused ? '' : a.activity ?? '',
       tool: a.tool,
@@ -243,6 +259,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
   function wake(agentKey, msg, { hop = 0, kind = 'ask', from, run } = {}) {
     const a = S.agents.get(agentKey);
     if (!a) return false;
+    if (kind === 'ask' && from && from !== 'ceo' && from !== 'system' && a.teamId !== OFFICE && !delegationEnabled(a.teamId)) return false;
     a.pending = a.pending ?? [];
     if (hop > LIM.hops) {
       // a long agent-to-agent chain: keep the message, but wait for a word from the owner before going on
@@ -297,9 +314,8 @@ export function createEngine({ cfg, appRoot, port, log }) {
     pumpTimer = setTimeout(pump, 50);
   }
   function pump() {
-    if (S.claude.state !== 'connected') return;
     const ready = [...S.agents.values()]
-      .filter((a) => a.pending?.some((i) => !i.held) && !running.has(key(a)) && !a.paused && !(a.teamId !== OFFICE && teamOf(a.teamId)?.paused))
+      .filter((a) => a.pending?.some((i) => !i.held) && (a.retryAfter ?? 0) <= Date.now() && (providerFor(selectedModel(a)) === 'claude' ? S.claude.state === 'connected' : providers.ready(selectedModel(a))) && !running.has(key(a)) && !a.paused && !(a.teamId !== OFFICE && teamOf(a.teamId)?.paused))
       .sort((x, y) => x.pending.find((i) => !i.held).at - y.pending.find((i) => !i.held).at);
     for (const a of ready) {
       if (running.size >= LIM.concurrent) break;
@@ -312,12 +328,19 @@ export function createEngine({ cfg, appRoot, port, log }) {
     // compaction waits until the agent has nothing else to do, and takes a turn slot like any turn
     for (const a of S.agents.values()) {
       if (running.size >= LIM.concurrent) break;
-      if (a.needsCompact && a.started && !a.paused && !a.pending?.some((i) => !i.held) && !running.has(key(a))) startCompact(a);
+      if (a.needsCompact && (a.started || a.providerSessions?.[providerFor(a.model)]) && ready(a.model) && !a.paused && !teamOf(a.teamId)?.paused && !a.pending?.some((i) => !i.held) && !running.has(key(a))) startCompact(a);
     }
   }
 
   /** Summarise an agent's conversation with Claude Code's /compact; memory.md and the company files are not touched. */
   function startCompact(a) {
+    if (providerFor(a.model) !== 'claude') {
+      if (running.has(key(a))) return;
+      if (a.providerSessions) delete a.providerSessions[providerFor(a.model)];
+      a.needsCompact = false; a.context = 0; a.compactedAt = Date.now();
+      saveAgent(a); snapshot();
+      return;
+    }
     const k = key(a);
     a.needsCompact = false;
     a.compacting = true;
@@ -446,6 +469,9 @@ export function createEngine({ cfg, appRoot, port, log }) {
     }
     const asker = [...items].reverse().find((i) => i.kind === 'ask' && i.from !== 'system');
     lines.push('---');
+    const activeProject = S.projects.find((p) => p.id === teamOf(a.teamId)?.activeProjectId);
+    if (activeProject) lines.push(`Current project: ${activeProject.name}. Folder: ${path.join(C, 'projects', activeProject.name)}. Keep this task within that project.`);
+    lines.push(`Team delegation: ${delegationEnabled(a.teamId) ? 'enabled; use OfficeX tools to hand work to agents with their selected providers' : 'OFF. Answer the owner yourself. Do not delegate, ask another team, or start background agent work.'}. Never switch providers to bypass a usage limit. Never purchase credits or enable paid API fallback.`);
     if (a.role === 'manager') {
       const u = S.claude.usage?.windows;
       const f = u?.five_hour, w = u?.seven_day;
@@ -488,10 +514,11 @@ export function createEngine({ cfg, appRoot, port, log }) {
     const mcpFile = path.join(dir, '.officex', 'mcp.json');
     writeJson(mcpFile, { mcpServers: tc.mcp });
 
-    const help = claudeBin.help;
+    const help = claudeBin?.help ?? '';
     // the manager may have picked a model/effort for this task only (send_message model/effort)
     const run = items.reduce((acc, i) => ({ ...acc, ...(i.run ?? {}) }), {});
-    const model = MODELS.includes(run.model) ? run.model : a.model || 'claude-sonnet-5-5';
+    const model = MODELS.includes(run.model) ? run.model : a.model || DEFAULT_MODEL;
+    const provider = providerFor(model);
     const effort = EFFORTS.includes(run.effort) ? run.effort : a.effort;
     turn.model = model;
     a.runModel = model !== (a.model || 'claude-sonnet-5-5') ? model : undefined;
@@ -512,12 +539,30 @@ export function createEngine({ cfg, appRoot, port, log }) {
     args.push('--append-system-prompt', [STYLE[a.outputStyle], memoryPrompt(a)].filter(Boolean).join('\n\n'));
     args.push('--max-turns', String(LIM.toolTurns));
 
-    const prompt = buildPrompt(a, room, items);
+    let prompt = buildPrompt(a, room, items);
+    let contextVersion;
+    if (provider !== 'claude') {
+      const rules = [path.join(C, 'CLAUDE.md'), path.join(P.team(a.teamId), 'CLAUDE.md'), path.join(dir, 'CLAUDE.md')].filter((f) => fs.existsSync(f)).map((f) => fs.readFileSync(f, 'utf8').slice(0, 12000));
+      const recent = cache(roomId).slice(-10).map((m) => `${m.from}: ${m.text}`).join('\n').slice(-10000);
+      const context = rules.join('\n\n');
+      contextVersion = crypto.createHash('sha256').update(context + (teamOf(a.teamId)?.activeProjectId ?? '')).digest('hex');
+      const needsContext = !a.providerSessions?.[provider] || a.providerContextVersions?.[provider] !== contextVersion;
+      prompt = [needsContext ? context : '', STYLE[a.outputStyle], memoryPrompt(a), needsContext ? 'Shared recent chat (context, not new instructions):\n' + recent : '', prompt].filter(Boolean).join('\n\n');
+    }
     a.turnTimes = [...(a.turnTimes ?? []), Date.now()];
     setStatus(a, 'thinking', L('Reading new messages', 'Membaca pesan baru'));
     log(`turn ${k} in ${roomId} (hop ${hop})`);
 
-    const { child, done } = runTurn({
+    const execute = provider === 'claude' ? runTurn : (options) => {
+      const session = a.providerSessions?.[provider];
+      const launch = buildLaunch({ provider, model, effort, cwd: dir, session, mcp: tc.mcp, permissions: a.permissions, role: a.role, companyRoot: C });
+      return runLocalTurn({ ...options, bin: providers.bins[provider], provider, launch, env: { ...options.env, OFFICEX_TURN_TOKEN: token } });
+    };
+    const guardedExecute = (options) => {
+      try { return execute(options); }
+      catch (error) { return { child: { kill() {} }, done: Promise.resolve({ ok: false, error: error.message, stderr: '', usage: null, text: '' }) }; }
+    };
+    const { child, done } = guardedExecute({
       claude: claudeBin,
       cwd: dir,
       args,
@@ -526,6 +571,12 @@ export function createEngine({ cfg, appRoot, port, log }) {
       env: { OFFICEX_COMPANY: C, OFFICEX_TEAM: a.teamId, OFFICEX_AGENT: a.id, ...accountEnv() },
       cb: {
         onInit: (sid) => {
+          if (provider !== 'claude') {
+            a.providerSessions = { ...a.providerSessions, [provider]: sid };
+            a.providerContextVersions = { ...a.providerContextVersions, [provider]: contextVersion };
+            saveAgent(a);
+            return;
+          }
           if (!a.started || a.sessionId !== sid) {
             a.sessionId = sid;
             a.started = true;
@@ -547,6 +598,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
     const stopTyping = a.role === 'secretary' && room.teamId === OFFICE && room.kind === 'ceo' ? telegramTyping() : () => {};
 
     done.then(async (r) => {
+      providers.record(model, r);
       stopTyping();
       usageSoon();
       running.delete(k);
@@ -568,7 +620,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
         const text = (r.text || '').trim();
         // already answered with a tool message in this turn: the final text is only a recap, keep it out of the chat
         if (turn.answered || turn.postedRooms.has(roomId)) activity(a.teamId, a.id, 'status', clip(text, 140));
-        else if (text && !/^NO_REPLY\b/.test(text)) {
+        else if (text && !/^NO_REPLY\b/.test(text) && !/\bNO_REPLY\s*$/.test(text)) {
           const extra = { steps: turn.steps.length ? turn.steps : undefined, projectorId: turn.projectorId, hop, kind: 'reply' };
           const toOwnerPhone = a.role === 'secretary' && room.teamId === OFFICE && room.kind === 'ceo';
           const msg = toOwnerPhone ? await secretarySays(a, text, extra) : post(roomId, k, text, extra);
@@ -583,11 +635,12 @@ export function createEngine({ cfg, appRoot, port, log }) {
       } else {
         const kind = failureKind(r);
         log(`turn failed ${k}: ${kind}: ${r.error}`);
-        if (kind === 'session' && !retry && a.started) {
+        if (kind === 'session' && !retry && (a.started || a.providerSessions?.[provider])) {
           // the saved conversation is gone (e.g. ~/.claude cleaned): start a fresh one
           a.sessionId = uuid();
           a.started = false;
           a.advisorSession = undefined;
+          if (a.providerSessions) delete a.providerSessions[provider];
           saveAgent(a);
           a.pending = [...items, ...a.pending];
           return startTurn(a, true);
@@ -595,15 +648,17 @@ export function createEngine({ cfg, appRoot, port, log }) {
         if (kind === 'auth') {
           a.pending = [...items, ...a.pending];
           savePending(a);
-          setClaude('disconnected', 'login');
+          if (provider === 'claude') setClaude('disconnected', 'login');
+          else { providers.invalidate(model, 'Sign in again in the official CLI'); providersChanged(); }
         } else if (kind === 'model') {
-          a.pending = [...items, ...a.pending];
+          a.pending = [...items.map((i) => ({ ...i, held: true })), ...a.pending];
           savePending(a);
-          post(roomId, 'system', L(`${a.name} cannot use the model "${modelLabel(turn.model)}" with this Claude account: ${r.error}. Pick another model in the agent panel (or, manager, in send_message); the message is kept.`, `${a.name} tidak bisa memakai model "${modelLabel(turn.model)}" dengan akun Claude ini: ${r.error}. Ganti model di panel agent (atau, manajer, di send_message); pesannya disimpan.`));
+          post(roomId, 'system', `${a.name} cannot use ${modelLabel(turn.model)} with ${provider}: ${r.error}. Choose an available model in the agent panel. The message is kept.`);
         } else if (kind === 'limit') {
           a.pending = [...items, ...a.pending];
           savePending(a);
-          post(roomId, 'system', L(`${a.name} hit the Claude usage limit. The message is kept and retried in 10 minutes.`, `${a.name} terkena batas pemakaian Claude. Pesannya disimpan dan dicoba lagi 10 menit lagi.`));
+          a.retryAfter = Date.now() + 10 * 60_000;
+          post(roomId, 'system', `${a.name} hit the ${provider} usage limit. Message kept; retry in 10 minutes. No paid fallback.`);
           setTimeout(pumpSoon, 10 * 60_000);
         } else {
           post(roomId, 'system', L(`${a.name} could not finish this turn: ${r.error}`, `${a.name} gagal menyelesaikan giliran ini: ${r.error}`), { steps: turn.steps.length ? turn.steps : undefined });
@@ -626,6 +681,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
   function setClaude(state, error = '') {
     S.claude = { ...S.claude, state, error, since: state === 'connected' ? Date.now() : S.claude.since };
     emit({ type: 'claude', claude: S.claude });
+    providersChanged();
     if (state === 'connected') pumpSoon();
   }
 
@@ -802,6 +858,8 @@ export function createEngine({ cfg, appRoot, port, log }) {
   // ---------------------------------------------------------------- tools for agents
   const S_STR = (description) => ({ type: 'string', description });
   const TOOL_DEFS = {
+    read_file: { description: 'Read a small text file. Path is relative to the company folder. Own folder is readable; read_company permission allows other company files. App settings and credentials are excluded.', inputSchema: { type: 'object', properties: { path: S_STR('Company-relative file path') }, required: ['path'] } },
+    list_files: { description: 'List names in one company-relative directory, using the same permissions as read_file.', inputSchema: { type: 'object', properties: { path: S_STR('Company-relative directory path; use . for company root if allowed') }, required: ['path'] } },
     send_message: {
       description:
         'Send a chat message that wakes the receiver. to: "owner" (managers and secretary), "manager", "team" (team room), an agent id from your team, "secretary" (managers), or a team id (secretary only). The receiver answers in the same room and the answer comes back to you. To answer the person who asked you, just give your final answer instead of using this tool.',
@@ -811,7 +869,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
           to: S_STR('Who gets it'),
           text: S_STR('Markdown text'),
           needs_input: { type: 'boolean', description: 'to="owner" only: the owner must decide or answer; also sent to their phone via the secretary' },
-          model: { type: 'string', enum: ['fable', 'opus', 'sonnet', 'haiku'], description: 'Managers only, for a team member: the model for THIS task only (their default stays). Match the task: haiku = fetch/convert/tidy/run a script; sonnet = read and summarise, routine analysis, drafting; opus = reasoning, research ideas, judgement, review; fable = the hardest problems.' },
+          model: { type: 'string', enum: [...MODELS, 'fable', 'opus', 'sonnet', 'haiku'], description: 'Manager only: model for this delegated task. Omit to keep the recipient model. gpt-6.1-sol uses Codex; gemini-* uses Google; claude-* uses Claude. Do not change providers to bypass plan limits.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'], description: 'Managers only, for a team member: how deeply they think for THIS task only.' },
         },
         required: ['to', 'text'],
@@ -908,7 +966,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
     telegram_send: { description: "Send a message to the owner's Telegram now.", inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } },
   };
   function toolsFor(a) {
-    return [...toolsForRole(a), 'remember', 'forget'];
+    return [...toolsForRole(a), 'remember', 'forget', 'read_file', 'list_files'];
   }
   function toolsForRole(a) {
     if (a.role === 'secretary') return ['send_message', 'telegram_send', 'show_on_projector', 'reminder_add', 'reminder_list', 'reminder_cancel'];
@@ -941,7 +999,13 @@ export function createEngine({ cfg, appRoot, port, log }) {
     };
 
     switch (name) {
+      case 'read_file': return ok(readCompanyFile(C, P.agent(a), a.permissions?.includes('read_company'), args.path));
+      case 'list_files': {
+        const directory = companyFilePath(C, P.agent(a), a.permissions?.includes('read_company'), args.path);
+        return ok(fs.readdirSync(directory, { withFileTypes: true }).filter((d) => !d.name.startsWith('.') && d.name !== OFFICE).slice(0, 200).map((d) => d.name + (d.isDirectory() ? '/' : '')).join('\n'));
+      }
       case 'send_message': {
+        if (!delegationEnabled(a.teamId) && !['ceo', 'owner', 'CEO'].includes(String(args.to))) throw new Error('Agent delegation is OFF. Answer the owner directly or enable it for the project first.');
         const to = String(args.to ?? '').trim();
         const text = String(args.text ?? '').trim();
         if (!text) throw new Error('text is empty');
@@ -988,6 +1052,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
         const run = {};
         if (a.role === 'manager' && a.autoModel !== false && target.role !== 'advisor') {
           if (MODEL_ALIAS[args.model]) run.model = MODEL_ALIAS[args.model];
+          else if (MODELS.includes(args.model)) run.model = args.model;
           if (EFFORTS.includes(args.effort)) run.effort = args.effort;
         }
         const msg = post(roomId, key(a), roomId.endsWith('__general') ? `@${target.name} ${text}` : text, { hop, kind, steps: turn.steps.length ? [...turn.steps] : undefined, ...(run.model || run.effort ? { run } : {}) });
@@ -1041,6 +1106,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
         return ok(L('Live chart is on the projector. Keep appending lines to the file.', 'Chart live tampil di proyektor. Terus tambahkan baris ke file itu.'));
       }
       case 'ask_team': {
+        if (!delegationEnabled(a.teamId)) throw new Error('Agent delegation is OFF for this project.');
         const team = teamOf(String(args.team)) ?? S.teams.find((t) => t.name.toLowerCase() === String(args.team).toLowerCase());
         if (!team || team.id === a.teamId) throw new Error(`unknown team. Teams: ${S.teams.filter((t) => t.id !== a.teamId).map((t) => `${t.id} (${t.name})`).join(', ')}`);
         const m = managerOf(team.id);
@@ -1188,7 +1254,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
         return ok(L('Cancelled.', 'Dibatalkan.'));
       }
       case 'plan_usage':
-        return ok(usageText() ?? L('No usage reading yet (it appears after the first agent turns).', 'Belum ada data pemakaian (muncul setelah giliran agent pertama).'));
+        return ok(JSON.stringify({ officeX: providers.usage(), claude: usageText(), connections: providerViews() }));
       case 'remember': {
         const note = clip(String(args.note ?? '').replace(/\s+/g, ' ').trim(), 400);
         if (!note) throw new Error('note is empty');
@@ -1364,7 +1430,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
       const tdir = path.join(C, 'employees', d.name);
       const t = readJson(path.join(tdir, 'team.json'));
       if (!t) continue;
-      S.teams.push({ id: d.name, name: t.name ?? d.name, mission: t.mission ?? '', color: t.color ?? '#9CC9F0', paused: !!t.paused, meeting: false, lastActive: t.lastActive ?? new Date().toISOString(), created: t.created ?? '' });
+      S.teams.push({ id: d.name, name: t.name ?? d.name, mission: t.mission ?? '', color: t.color ?? '#9CC9F0', paused: !!t.paused, agentMode: t.agentMode === true, activeProjectId: t.activeProjectId, meeting: false, lastActive: t.lastActive ?? new Date().toISOString(), created: t.created ?? '' });
       for (const ad of fs.readdirSync(tdir, { withFileTypes: true })) if (ad.isDirectory() && !/^[._]/.test(ad.name)) loadAgent(path.join(tdir, ad.name), d.name);
       for (const s of readJson(P.schedules(d.name), []) ?? []) S.schedules.push({ ...s, teamId: d.name });
     }
@@ -1417,6 +1483,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
         decisions,
         findings,
         collaborators: pj.collaborators ?? [],
+        agentMode: pj.agentMode === true,
       });
     }
     S.projects = out.sort((x, y) => x.created.localeCompare(y.created));
@@ -1432,7 +1499,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
     writeText(path.join(P.team(teamId), 'CLAUDE.md'), teamClaudeMd({ team: t, agents: agentsOf(teamId).map((a) => ({ ...a, status: a.paused ? 'paused' : 'idle' })) }));
   }
   function saveTeam(t) {
-    writeJson(path.join(P.team(t.id), 'team.json'), { name: t.name, mission: t.mission, color: t.color, paused: t.paused, created: t.created ?? new Date().toISOString(), lastActive: t.lastActive });
+    writeJson(path.join(P.team(t.id), 'team.json'), { name: t.name, mission: t.mission, color: t.color, paused: t.paused, agentMode: t.agentMode === true, activeProjectId: t.activeProjectId, created: t.created ?? new Date().toISOString(), lastActive: t.lastActive });
   }
 
   // ---------------------------------------------------------------- state for the GUI
@@ -1445,6 +1512,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
       schedules: S.schedules.map(({ _key, ...s }) => s),
       consults: [...S.consults].map((id) => consultRoom(...id.slice(7).split('__'))),
       claude: S.claude,
+      providers: providerViews(),
       reminders: [...S.reminders].sort((x, y) => x.at - y.at),
     };
   }
@@ -1515,7 +1583,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
       name: clip(a.name, 40) || a.id,
       role,
       roleTitle: clip(a.roleTitle, 60) || role,
-      model: MODELS.includes(a.model) ? a.model : 'claude-sonnet-5-5',
+      model: MODELS.includes(a.model) ? a.model : DEFAULT_MODEL,
       effort: EFFORTS.includes(a.effort) ? a.effort : 'medium',
       outputStyle: ['default', 'explanatory', 'concise'].includes(a.outputStyle) ? a.outputStyle : 'default',
       color: /^#[0-9a-f]{6}$/i.test(a.color ?? '') ? a.color : '#F2B544',
@@ -1533,7 +1601,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
       awaiting: new Set(),
       turnTimes: [],
     };
-    if (advisor && !agent.advisorSession) throw new Error('advisor needs an existing Claude Code session id');
+    if (advisor && agent.advisorSession && providerFor(agent.model) !== 'claude') throw new Error('An imported Claude session requires a Claude model. Leave the imported session blank for a new Codex or Gemini advisor.');
     const dir = P.agent(agent);
     fs.mkdirSync(path.join(dir, 'notes'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'workspace'), { recursive: true });
@@ -1557,6 +1625,10 @@ export function createEngine({ cfg, appRoot, port, log }) {
     const a = S.agents.get(`${body.teamId}/${body.id}`);
     if (!a) throw new Error('unknown agent');
     const p = body.patch ?? {};
+    if (p.model !== undefined && !MODELS.includes(p.model)) throw new Error('Unknown model');
+    if (p.model !== undefined && running.has(key(a))) throw new Error('Wait for this agent to finish before switching models');
+    if (a.advisorSession && p.model && providerFor(p.model) !== 'claude') throw new Error('Imported Claude advisor sessions require a Claude model. Create a new advisor without importing a session to use another provider.');
+    if (p.model && p.model !== a.model) { a.retryAfter = 0; for (const item of a.pending ?? []) item.held = false; savePending(a); }
     for (const f of PATCHABLE) if (p[f] !== undefined) a[f] = p[f];
     if (a.role === 'advisor') a.permissions = (a.permissions ?? []).filter((x) => ['web', 'read_company'].includes(x));
     if (p.status === 'paused') a.paused = true;
@@ -1633,11 +1705,35 @@ export function createEngine({ cfg, appRoot, port, log }) {
       if (body === null) return json(res, 400, { error: 'bad JSON' }), true;
 
       if (route === '/api/messages' && m === 'POST') return json(res, 201, ownerMessage(body)), true;
+      if (route === '/api/provider-login' && m === 'GET') {
+        const id = url.searchParams.get('provider');
+        if (!['codex', 'gemini'].includes(id)) throw new Error('Unknown provider');
+        return json(res, 200, providerLogin.check(id)), true;
+      }
+      if (route === '/api/provider-login' && m === 'POST') {
+        if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return json(res, 403, { error: 'Sign-in must start from this OfficeX page.' }), true;
+        const id = body.provider;
+        if (!['codex', 'gemini'].includes(id)) throw new Error('Unknown provider');
+        if (body.action === 'cancel') return json(res, 200, await providerLogin.cancel(id)), true;
+        if (body.action === 'code') return json(res, 200, providerLogin.submit(id, body.code)), true;
+        if (body.action !== 'start') throw new Error('Unknown sign-in action');
+        if ([...S.agents.values()].some((a) => running.has(key(a)) && providerFor(a.runModel ?? a.model) === id)) throw new Error('Wait for this provider’s agents to finish before signing in.');
+        return json(res, 200, await providerLogin.start(id, { force: body.force === true, deviceCode: body.deviceCode === true })), true;
+      }
+      if (route === '/api/providers' && m === 'GET') return json(res, 200, { providers: providerViews(), usage: providers.usage() }), true;
+      if (route === '/api/providers/refresh' && m === 'POST') { await providers.refresh(true); providersChanged(); return json(res, 200, { providers: providerViews(), usage: providers.usage() }), true; }
+      if (route === '/api/providers' && m === 'PATCH') { providers.enable(body.id, body.enabled); await providers.refresh(); providersChanged(); return json(res, 200, { providers: providerViews(), usage: providers.usage() }), true; }
       if (route === '/api/teams' && m === 'POST') return json(res, 201, createTeam(body)), true;
       if (route === '/api/teams' && m === 'PATCH') {
         const t = teamOf(body.id);
         if (!t) throw new Error('unknown team');
         if (typeof body.paused === 'boolean') t.paused = body.paused;
+        if (typeof body.agentMode === 'boolean') t.agentMode = body.agentMode;
+        if (body.activeProjectId !== undefined) {
+          if (body.activeProjectId !== null && !S.projects.some((p) => p.id === body.activeProjectId && p.teamId === t.id)) throw new Error('Project does not belong to this team');
+          if (running.size || agentsOf(t.id).some((a) => a.pending?.length)) throw new Error('Finish running or queued work before changing project context');
+          t.activeProjectId = body.activeProjectId;
+        }
         if (body.name) t.name = clip(body.name, 60);
         if (body.mission !== undefined) t.mission = clip(body.mission, 400);
         saveTeam(t);
@@ -1660,7 +1756,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
       if (route === '/api/agents/compact' && m === 'POST') {
         const a = S.agents.get(`${body.teamId}/${body.id}`);
         if (!a) throw new Error('unknown agent');
-        if (!a.started) throw new Error(L('This agent has no conversation yet.', 'Agent ini belum punya percakapan.'));
+        if (!a.started && !a.providerSessions?.[providerFor(a.model)]) throw new Error(L('This agent has no conversation yet.', 'Agent ini belum punya percakapan.'));
         a.needsCompact = true;
         pumpSoon();
         return json(res, 200, { ok: true }), true;
@@ -1670,6 +1766,8 @@ export function createEngine({ cfg, appRoot, port, log }) {
         if (!p) throw new Error('unknown project');
         const file = path.join(C, 'projects', p.name, 'project.json');
         const pj = readJson(file, {});
+        if (typeof body.agentMode === 'boolean') { pj.agentMode = body.agentMode; p.agentMode = body.agentMode; }
+        if (body.collaborators === undefined) { writeJson(file, pj); snapshot(); pumpSoon(); return json(res, 200, p), true; }
         pj.collaborators = (Array.isArray(body.collaborators) ? body.collaborators : []).map((c) => ({ kind: c.kind === 'agent' ? 'agent' : 'team', id: String(c.id), access: 'advisor', invitedAt: Number(c.invitedAt) || Date.now() }));
         writeJson(file, pj);
         p.collaborators = pj.collaborators;
@@ -2020,6 +2118,8 @@ export function createEngine({ cfg, appRoot, port, log }) {
   async function start() {
     if (!enabled) return;
     load();
+    await providers.refresh();
+    providersChanged();
     log(`Company: ${S.company.name} (${S.teams.length} teams, ${S.agents.size} agents)`);
     S.claude.account = accountView();
     const savedUsage = readJson(usageFile(), null);
@@ -2039,6 +2139,7 @@ export function createEngine({ cfg, appRoot, port, log }) {
   }
   /** Let running turns finish (Claude Code saves the session as it goes), then stop. */
   function stop() {
+    void providerLogin.stop();
     timers.forEach(clearInterval);
     tgLoop = false;
     S.claude.state = 'disconnected'; // no new turns

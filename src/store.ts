@@ -26,7 +26,7 @@ export type Focus = FocusInput & { n: number };
 
 /** What the GUI shows after team pause and the Claude connection are applied. */
 export function shownStatus(a: Agent, team: Team | undefined, claude: ClaudeConnection): ShownStatus {
-  if (claude.state !== 'connected') return 'offline';
+  if ((a.providerState ?? claude.state) !== 'connected') return 'offline';
   if (a.status === 'paused') return 'paused';
   if (team?.paused) return 'team_paused';
   return a.status;
@@ -77,6 +77,7 @@ function saveLang(l: Lang) {
 }
 
 interface State {
+  providers?: LiveSnapshot['providers'];
   lang: Lang | null;
   company: Company;
   teams: Team[];
@@ -109,6 +110,8 @@ interface State {
   focus: Focus;
   addAgentOpen: boolean;
   connectOpen: boolean;
+  connectProvider: 'all' | 'codex' | 'gemini' | 'claude';
+  setConnectProvider: (provider: 'all' | 'codex' | 'gemini' | 'claude') => void;
 
   /** pending: asking the server; demo: built-in simulator; live: OfficeX engine with real Claude Code agents */
   mode: 'pending' | 'demo' | 'live';
@@ -176,6 +179,7 @@ function structure(st: LiveSnapshot, prev: { agents: Record<string, Agent> }) {
     consults: st.consults,
     rooms: allRooms(agents, st.teams, st.consults),
     claude: st.claude,
+    providers: st.providers,
   };
 }
 
@@ -212,6 +216,8 @@ export const useStore = create<State>((set, get) => ({
   focus: { kind: 'building', n: 0 },
   addAgentOpen: false,
   connectOpen: false,
+  connectProvider: 'all',
+  setConnectProvider: (connectProvider) => set({ connectProvider }),
 
   mode: 'pending',
   hydrate: (st) => {
@@ -485,6 +491,9 @@ export const useStore = create<State>((set, get) => ({
         return;
       case 'claude':
         set({ claude: e.claude });
+        return;
+      case 'providers':
+        set({ providers: e.providers });
         return;
       case 'projector.show': {
         const now = performance.now();

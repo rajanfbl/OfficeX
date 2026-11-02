@@ -4,9 +4,13 @@
 
 export type Lang = 'en' | 'id';
 
-export type ModelId = 'claude-fable-5-1' | 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5';
+export type ModelId = 'gpt-6.1-sol' | 'gemini-3.8-flash-medium' | 'gemini-3.8-flash-low' | 'gemini-3.8-flash-high' | 'claude-fable-5-1' | 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5';
 
 export const MODELS: { id: ModelId; label: string }[] = [
+  { id: 'gpt-6.1-sol', label: 'Codex · GPT 6.1 Sol' },
+  { id: 'gemini-3.8-flash-medium', label: 'Gemini · Flash 3.8 Medium' },
+  { id: 'gemini-3.8-flash-low', label: 'Gemini · Flash 3.8 Low' },
+  { id: 'gemini-3.8-flash-high', label: 'Gemini · Flash 3.8 High' },
   { id: 'claude-fable-5-1', label: 'Fable 5.1' },
   { id: 'claude-opus-5-5', label: 'Opus 5.5' },
   { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
@@ -55,6 +59,8 @@ export const READ_ONLY_PERMISSIONS: Permission[] = ['web', 'read_company'];
 export type BrowserMode = 'separate' | 'my_chrome';
 
 export interface Agent {
+  resumeSessionId?: string;
+  providerState?: 'connected' | 'disconnected';
   id: string; // folder slug, e.g. "researcher-1"
   teamId: string;
   name: string;
@@ -99,6 +105,8 @@ export interface SecretaryNotify {
 }
 
 export interface Team {
+  agentMode?: boolean;
+  activeProjectId?: string | null;
   id: string; // "team_quant"
   name: string;
   mission: string;
@@ -114,6 +122,7 @@ export const PHASES: ProjectPhase[] = ['bootstrap', 'discovery', 'decision', 'bu
 
 /** A project folder under COMPANY_XXX/projects/, scaffolded with the new-project skill layout. */
 export interface Project {
+  agentMode?: boolean;
   id: string; // slug
   name: string; // folder name
   teamId: string;
@@ -258,6 +267,7 @@ export interface ActivityEvent {
 
 /** Events the backend will push over WebSocket. */
 export type ServerEvent =
+  | { type: 'providers'; providers: Record<string, ProviderConnection> }
   | { type: 'agent.status'; teamId: string; agentId: string; status: AgentStatus; activity: string; tool?: ToolName; runModel?: ModelId }
   | { type: 'agent.usage'; teamId: string; agentId: string; tokensToday: number; turnsThisHour: number }
   | { type: 'team.meeting'; teamId: string; active: boolean }
@@ -274,6 +284,7 @@ export type ServerEvent =
 
 /** Structure of the company as the OfficeX engine sends it (api/state and "snapshot" events). */
 export interface LiveSnapshot {
+  providers?: Record<string, ProviderConnection>;
   company: Company;
   teams: Team[];
   agents: Agent[];
@@ -282,6 +293,18 @@ export interface LiveSnapshot {
   consults: Room[];
   claude: ClaudeConnection;
   reminders?: Reminder[];
+}
+
+export interface ProviderConnection {
+  quota?: { primary?: { usedPercent: number; resetsAt: number }; secondary?: { usedPercent: number; resetsAt: number }; credits?: { balance?: string | null }; checkedAt: number };
+  quotaError?: string;
+  id: string;
+  label: string;
+  enabled: boolean;
+  state: 'connected' | 'connecting' | 'disconnected';
+  detail?: string;
+  models: string[];
+  checkedAt?: number;
 }
 
 /** A reminder the secretary keeps for the owner; OfficeX delivers it on time (chat + Telegram). */

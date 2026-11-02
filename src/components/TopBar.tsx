@@ -7,6 +7,8 @@ export function TopBar() {
   const t = useT();
   const company = useStore((s) => s.company);
   const claude = useStore((s) => s.claude);
+  const providers = useStore((s) => s.providers);
+  const ready = Object.values(providers ?? {}).some((p) => p.state === 'connected') || claude.state === 'connected';
   const teams = useStore((s) => s.teams);
   const lang = useStore((s) => s.lang) ?? 'en';
   const setAllPaused = useStore((s) => s.setAllPaused);
@@ -23,16 +25,21 @@ export function TopBar() {
           <small>{t('app.name')}</small>
         </span>
       </div>
-
-      <button className={`conn conn--${claude.state}`} onClick={() => openConnect(true)}>
+      <div className="provider-connect-buttons" aria-label="Connect AI subscriptions">
+        {([{ id: 'codex', label: 'ChatGPT' }, { id: 'gemini', label: 'Gemini' }, { id: 'claude', label: 'Claude' }] as const).map((p) => <button key={p.id} className={`conn conn--${providers?.[p.id]?.state ?? 'disconnected'}`} onClick={() => { useStore.getState().setConnectProvider(p.id); openConnect(true); }}>
+          Connect {p.label}<span className="conn__dot" aria-label={providers?.[p.id]?.state ?? 'disconnected'} />
+        </button>)}
+      </div>
+      <button className={`conn conn--${ready ? 'connected' : 'disconnected'}`} onClick={() => { useStore.getState().setConnectProvider('all'); openConnect(true); }}>
         <svg className="conn__spark" viewBox="0 0 16 16" aria-hidden>
           <path d="M8 1.5l1.6 4.3 4.3 1.6-4.3 1.6L8 13.3 6.4 9 2.1 7.4l4.3-1.6z" />
         </svg>
-        {claude.state === 'connected' ? t('claude.connected') : claude.state === 'connecting' ? t('claude.connecting') : t('claude.connect')}
+        AI connections · {ready ? 'ready' : 'set up'}
         <span className="conn__dot" aria-hidden />
       </button>
 
       <UsageMeter />
+      <small className="muted">v0.5.1 beta</small>
 
       <div className="topbar__right">
         <button className={`btn ${allPaused ? 'btn--warn' : 'btn--ghost'}`} onClick={() => setAllPaused(!allPaused)} aria-pressed={allPaused}>

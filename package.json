@@ -1,7 +1,7 @@
 {
   "name": "officex",
   "private": true,
-  "version": "0.4.3",
+  "version": "0.5.1-beta.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,8 @@
     "build:preview": "vite build --mode singlefile",
     "preview": "vite preview",
     "serve": "node server/serve.mjs",
-    "new-project": "node server/scaffold-project.mjs"
+    "new-project": "node server/scaffold-project.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@react-three/drei": "9.114.0",

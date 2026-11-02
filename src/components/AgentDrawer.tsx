@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { agentKey, shownStatus, useStore } from '../store';
 import { agoText, useT } from '../i18n';
 import { api, bridge } from '../api';
-import { MODELS, OFFICE_ID, type ModelId } from '../types';
+import { OFFICE_ID } from '../types';
+import { ModelPicker } from './ModelPicker';
 import { Permissions } from './Permissions';
 import { EffortStyle } from './EffortStyle';
 import { tokens } from '../util';
@@ -71,13 +72,7 @@ export function AgentDrawer() {
           <h3>
             <label htmlFor="model">{t('drawer.model')}</label>
           </h3>
-          <select id="model" className="input" value={agent.model} onChange={(e) => st.updateAgent(agent.teamId, agent.id, { model: e.target.value as ModelId })}>
-            {MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}, {t(`model.${m.id}` as never).toLowerCase()}
-              </option>
-            ))}
-          </select>
+          <ModelPicker model={agent.model} lockedClaude={!!agent.advisorSession} onChange={(model) => st.updateAgent(agent.teamId, agent.id, { model })} />
           <EffortStyle
             idPrefix={`d-${agent.teamId}-${agent.id}`}
             effort={agent.effort}
@@ -122,13 +117,13 @@ export function AgentDrawer() {
                 <span style={{ width: `${Math.min(100, ((agent.context ?? 0) / agent.compactAt) * 100)}%` }} />
               </div>
             )}
-            <p className="muted small">{agent.compactAt ? t('drawer.compactNote', { n: tokens(agent.compactAt) }) : t('drawer.compactOff')}</p>
+            <p className="muted small">{!agent.model.startsWith('claude-') ? 'Start a fresh provider conversation while keeping OfficeX chat and saved memory. Provider context size is not reported here.' : agent.compactAt ? t('drawer.compactNote', { n: tokens(agent.compactAt) }) : t('drawer.compactOff')}</p>
             <button
               className="btn btn--ghost btn--sm"
-              disabled={agent.compacting || !agent.context}
+              disabled={agent.compacting || (agent.model.startsWith('claude-') ? !agent.context : !agent.resumeSessionId)}
               onClick={() => api('POST', 'api/agents/compact', { teamId: agent.teamId, id: agent.id }).catch(() => {})}
             >
-              {t('drawer.compactNow')}
+              {agent.model.startsWith('claude-') ? t('drawer.compactNow') : 'Start fresh conversation'}
             </button>
           </section>
         )}
@@ -204,7 +199,7 @@ export function AgentDrawer() {
             <code className="mono">
               cd "{folder}"
               <br />
-              claude --resume {agent.sessionId}
+              {agent.model.startsWith('gpt-') ? 'codex exec resume' : agent.model.startsWith('gemini-') ? 'agy --conversation' : 'claude --resume'} {agent.resumeSessionId ?? '(no session yet)'}
             </code>
           </div>
         )}
